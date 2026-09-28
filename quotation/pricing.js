@@ -1,0 +1,28 @@
+// All monetary configuration is in integer paise. Percentages use basis points.
+export const PRICING = Object.freeze({version:'2026-09-28',currency:'INR',locations:[{id:'dharwad',name:'Dharwad',reelPaise:89900},{id:'hubli',name:'Hubli',reelPaise:99900}],postPaise:9900,metaBasisPoints:1200,websites:[{id:'landing',name:'Landing Page',description:'Professional conversion-focused single-page website.',paise:1499900},{id:'full',name:'Frontend + Backend',description:'Full website with frontend and backend functionality.',paise:2500000},{id:'custom',name:'Custom Website',description:'Custom requirements will be reviewed and pricing will be shared shortly.',paise:null}]});
+export const SERVICES = [
+ {id:'reels',name:'Reels',symbol:'01',description:'Short-form video, made to stand out.',kind:'quantity',defaultValue:6},
+ {id:'posts',name:'Social Media Posts',symbol:'02',description:'Thoughtfully designed social creatives.',kind:'quantity',defaultValue:10},
+ {id:'meta',name:'Meta Advertising',symbol:'03',description:'Campaign setup, management and optimization.',kind:'budget',defaultValue:10000},
+ {id:'website',name:'Website Development',symbol:'04',description:'A digital home for your business.',kind:'options',defaultValue:'landing'},
+ {id:'brand',name:'Brand Redesign',symbol:'05',description:'A strategic refresh of your visual identity.',kind:'custom',defaultValue:null}
+];
+export const STATUSES=['Draft','Presented','Follow-up','Accepted','Rejected'];
+export const money=p=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',minimumFractionDigits:0,maximumFractionDigits:2}).format(p/100);
+export const dateLabel=s=>new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'long',year:'numeric'}).format(new Date(s));
+export function quantity(n){if(!Number.isSafeInteger(n)||n<0||n>10000)throw Error('Enter a whole quantity from 0 to 10,000.');return n;}
+export function budgetPaise(n){if(typeof n!=='number'||!Number.isFinite(n)||n<0||n>10000000)throw Error('Enter a media budget from ₹0 to ₹1,00,00,000.');return Math.round(n*100);}
+export function calculate(quote,pricing=quote.pricing||PRICING){
+ const location=pricing.locations.find(x=>x.id===quote.location);const items=[];let servicePaise=0,mediaPaise=0;
+ for(const service of SERVICES){const selected=quote.services[service.id];if(!selected?.enabled)continue;if(!location)throw Error('Choose a location before adding services.');let item;
+  if(service.id==='reels'||service.id==='posts'){const count=quantity(selected.value);const unit=service.id==='reels'?location.reelPaise:pricing.postPaise;item={id:service.id,name:service.id==='reels'?'Short-Form Reels':'Social Media Posts',quantity:count,unitPaise:unit,amountPaise:count*unit,detail:`${count} × ${money(unit)}`};}
+  else if(service.id==='meta'){mediaPaise=budgetPaise(selected.value);item={id:'meta',name:'Meta Ads Management Fee',amountPaise:Math.round(mediaPaise*pricing.metaBasisPoints/10000),detail:`${pricing.metaBasisPoints/100}% of ${money(mediaPaise)} media budget`};}
+  else if(service.id==='website'){const option=pricing.websites.find(x=>x.id===selected.value);if(!option)throw Error('Choose a valid website option.');item={id:'website',name:option.name==='Landing Page'?'Landing Page Development':option.name,amountPaise:option.paise,detail:option.description};}
+  else if(service.kind==='custom'){item={id:service.id,name:service.name,amountPaise:null,detail:'Pricing will be shared after reviewing requirements and scope.'};}
+  if(!item)throw Error('Unsupported service configuration.');items.push(item);if(item.amountPaise!==null)servicePaise+=item.amountPaise;
+ }
+ return {items,servicePaise,mediaPaise,totalPaise:servicePaise+mediaPaise,hasCustom:items.some(i=>i.amountPaise===null),hasFixed:items.some(i=>i.amountPaise!==null),hasMedia:!!quote.services.meta?.enabled,location:location?.name||''};
+}
+export function newQuote(){const now=new Date();return {schema:1,id:`APX-${now.getFullYear()}-${crypto.randomUUID().replaceAll('-','').slice(0,12).toUpperCase()}`,createdAt:now.toISOString(),updatedAt:now.toISOString(),status:'Draft',client:{business:'',contact:'',phone:'',email:'',notes:''},location:'',services:Object.fromEntries(SERVICES.map(s=>[s.id,{enabled:false,value:s.defaultValue}])),pricing:structuredClone(PRICING)};}
+export function validateQuote(q){if(!q.client.business.trim())return 'Enter the client’s business name to continue.';if(!q.location)return 'Choose the client’s location.';if(!Object.values(q.services).some(s=>s.enabled))return 'Select at least one service.';if(q.client.phone&& !/^[+\d\s().-]{6,24}$/.test(q.client.phone))return 'Enter a valid phone number, including country code if needed.';if(q.client.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(q.client.email))return 'Enter a valid email address.';try{calculate(q);}catch(e){return e.message;}return '';}
+export function shareText(q){const r=calculate(q);return [`Hello ${q.client.contact||q.client.business},`,'','Thank you for discussing your requirements with Apex Media.','',`Quotation ${q.id} | ${r.location}`,dateLabel(q.createdAt),'',...r.items.map(i=>`${i.quantity!==undefined?i.quantity+' ':''}${i.name} — ${i.amountPaise===null?'Custom Quote':money(i.amountPaise)}`),'',`Apex Media Services — ${r.hasFixed?money(r.servicePaise):'Pricing on consultation'}`,...(r.hasMedia?[`Advertising / Media Budget — ${money(r.mediaPaise)}`]:[]),`${r.hasCustom?'Known Project Amount':'Project Total'} — ${r.hasFixed?money(r.totalPaise):'Pricing on consultation'}`,...(r.hasCustom?['Custom services are not included and will be quoted separately.']:[]),'','Apex Media','apexmedias.in'].join('\n');}
